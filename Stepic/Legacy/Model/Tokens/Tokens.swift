@@ -16,7 +16,7 @@ final class Tokens {
     static let shared = Tokens()
 
     private convenience init() {
-        self.init(plist: "Tokens")!
+        self.init(amplitudeToken: "", appMetricaToken: "", firebaseId: 0)
     }
 
     private init(amplitudeToken: String, appMetricaToken: String, firebaseId: UInt) {
