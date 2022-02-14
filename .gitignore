@@ -44,3 +44,4 @@ Carthage/Build
 
 # AppCode
 .idea/
+Podfile.lock
