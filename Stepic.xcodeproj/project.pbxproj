@@ -10635,7 +10635,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "${SRCROOT}/lint.sh ${TARGET_NAME}\n";
+			shellScript = "\"${SRCROOT}\"/lint.sh ${TARGET_NAME}\n";
 		};
 		2C47A16C206297D0003E87EC /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
