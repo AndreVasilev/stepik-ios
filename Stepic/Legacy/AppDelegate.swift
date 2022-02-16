@@ -7,8 +7,6 @@
 //
 
 import FBSDKCoreKit
-import FirebaseCore
-import FirebaseMessaging
 import GoogleSignIn
 import IQKeyboardManagerSwift
 import MediaPlayer
@@ -242,13 +240,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             return
         }
 
-        Messaging.messaging().token { [weak self] (token, error) in
+        /*Messaging.messaging().token { [weak self] (token, error) in
             if let error = error {
                 print("Error fetching FCM token: \(error)")
             } else if let token = token {
                 self?.notificationsRegistrationService.registerDevice(token)
             }
-        }
+        }*/
     }
 
     // MARK: - Continuing User Activity and Handling Quick Actions

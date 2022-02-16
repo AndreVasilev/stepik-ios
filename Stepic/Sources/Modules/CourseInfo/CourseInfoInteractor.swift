@@ -40,7 +40,6 @@ final class CourseInfoInteractor: CourseInfoInteractorProtocol {
     private let courseViewSource: AnalyticsEvent.CourseViewSource
 
     private let iapService: IAPServiceProtocol
-    private let iapPaymentsCache: IAPPaymentsCacheProtocol
 
     private let dataBackUpdateService: DataBackUpdateServiceProtocol
 
@@ -122,7 +121,6 @@ final class CourseInfoInteractor: CourseInfoInteractorProtocol {
         urlFactory: StepikURLFactory,
         dataBackUpdateService: DataBackUpdateServiceProtocol,
         iapService: IAPServiceProtocol,
-        iapPaymentsCache: IAPPaymentsCacheProtocol,
         analytics: Analytics,
         remoteConfig: RemoteConfig,
         courseViewSource: AnalyticsEvent.CourseViewSource
@@ -141,7 +139,6 @@ final class CourseInfoInteractor: CourseInfoInteractorProtocol {
         self.urlFactory = urlFactory
         self.dataBackUpdateService = dataBackUpdateService
         self.iapService = iapService
-        self.iapPaymentsCache = iapPaymentsCache
         self.analytics = analytics
         self.remoteConfig = remoteConfig
 
@@ -428,14 +425,6 @@ final class CourseInfoInteractor: CourseInfoInteractorProtocol {
         self.presenter.presentPaidCourseRestorePurchaseResult(response: .init(state: .inProgress))
         self.analytics.send(.courseRestoreCoursePurchasePressed(id: self.courseID, source: .courseScreen))
 
-        if let cachedCoursePaymentPayload = self.iapPaymentsCache.getCoursePayment(for: self.courseID) {
-            return self.iapService.retryValidateReceipt(
-                courseID: self.courseID,
-                mobileTier: cachedCoursePaymentPayload.productIdentifier,
-                delegate: self
-            )
-        }
-
         firstly { () -> Guarantee<MobileTierPlainObject?> in
             if let currentMobileTier = self.currentMobileTier {
                 return .value(currentMobileTier)
@@ -453,33 +442,12 @@ final class CourseInfoInteractor: CourseInfoInteractorProtocol {
             return .value(nil)
         }
         .compactMap { $0?.promoTier ?? $0?.priceTier }
-        .done { purchaseMobileTier in
-            if self.iapPaymentsCache.getCoursePayment(for: self.courseID) == nil {
-                self.iapService
-                    .fetchProduct(for: purchaseMobileTier)
-                    .compactMap { $0 }
-                    .done { product in
-                        self.iapPaymentsCache.insertCoursePayment(
-                            courseID: self.courseID,
-                            promoCode: self.currentMobileTier?.promoCodeName,
-                            product: product
-                        )
-                        self.iapService.retryValidateReceipt(
-                            courseID: self.courseID,
-                            mobileTier: purchaseMobileTier,
-                            delegate: self
-                        )
-                    }
-                    .catch { error in
-                        self.iapService(self.iapService, didFailPurchaseCourse: self.courseID, withError: error)
-                    }
-            } else {
-                self.iapService.retryValidateReceipt(
-                    courseID: self.courseID,
-                    mobileTier: purchaseMobileTier,
-                    delegate: self
-                )
-            }
+		.done { purchaseMobileTier in
+			self.iapService.retryValidateReceipt(
+				courseID: self.courseID,
+				mobileTier: purchaseMobileTier,
+				delegate: self
+			)
         }
         .catch { error in
             self.iapService(self.iapService, didFailPurchaseCourse: self.courseID, withError: error)

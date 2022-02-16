@@ -16,7 +16,7 @@ final class AnalyticsHelper {
     static var sharedHelper = AnalyticsHelper()
 
     func setupAnalytics() {
-        FirebaseApp.configure()
+//        FirebaseApp.configure()
 
         if let config = YMMYandexMetricaConfiguration(apiKey: Tokens.shared.appMetricaToken) {
             YMMYandexMetrica.activate(with: config)

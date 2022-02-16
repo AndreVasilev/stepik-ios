@@ -39,7 +39,6 @@ final class IAPPaymentsService: NSObject, IAPPaymentsServiceProtocol {
     weak var delegate: IAPPaymentsServiceDelegate?
 
     private let paymentQueue: SKPaymentQueue
-    private let paymentsCache: IAPPaymentsCacheProtocol
     private let receiptValidationService: IAPReceiptValidationServiceProtocol
 
     private let iapSettingsStorageManager: IAPSettingsStorageManagerProtocol
@@ -53,7 +52,6 @@ final class IAPPaymentsService: NSObject, IAPPaymentsServiceProtocol {
 
     init(
         paymentQueue: SKPaymentQueue = SKPaymentQueue.default(),
-        paymentsCache: IAPPaymentsCacheProtocol = IAPPaymentsCache.shared,
         receiptValidationService: IAPReceiptValidationServiceProtocol = IAPReceiptValidationService(
             coursePaymentsNetworkService: CoursePaymentsNetworkService(
                 coursePaymentsAPI: CoursePaymentsAPI()
@@ -64,7 +62,6 @@ final class IAPPaymentsService: NSObject, IAPPaymentsServiceProtocol {
         analytics: Analytics = StepikAnalytics.shared
     ) {
         self.paymentQueue = paymentQueue
-        self.paymentsCache = paymentsCache
         self.receiptValidationService = receiptValidationService
         self.iapSettingsStorageManager = iapSettingsStorageManager
         self.userAccountService = userAccountService
@@ -90,7 +87,6 @@ final class IAPPaymentsService: NSObject, IAPPaymentsServiceProtocol {
 
     func buy(courseID: Course.IdType, promoCode: String?, product: SKProduct) {
         if self.canMakePayments() {
-            self.paymentsCache.insertCoursePayment(courseID: courseID, promoCode: promoCode, product: product)
             self.paymentQueue.add(SKPayment(product: product))
         } else {
             self.delegate?.iapPaymentsService(self, didFailPurchaseCourse: courseID, withError: Error.paymentNotAllowed)
@@ -112,25 +108,17 @@ final class IAPPaymentsService: NSObject, IAPPaymentsServiceProtocol {
             return reportRetryValidateReceiptFailed(error: Error.paymentNotFoundTransactionForRetryValidateReceipt)
         }
 
-        guard let payload = self.paymentsCache.getCoursePayment(for: transaction),
-              payload.courseID == courseID else {
-            return reportRetryValidateReceiptFailed(
-                error: Error.paymentNotFoundTransactionPayloadForRetryValidateReceipt
-            )
-        }
-
-        guard payload.userID == self.userAccountService.currentUserID else {
+        guard 2 == self.userAccountService.currentUserID else {
             return reportRetryValidateReceiptFailed(error: Error.paymentUserChanged)
         }
 
-        self.validateReceipt(transaction: transaction, payload: payload, forceRefreshReceipt: true)
+        self.validateReceipt(transaction: transaction, forceRefreshReceipt: true)
     }
 
     func finishAllTransactions() -> Int {
         let count = self.paymentQueue.transactions.count
 
         for transaction in self.paymentQueue.transactions {
-            self.paymentsCache.removeCoursePayment(for: transaction)
             self.paymentQueue.finishTransaction(transaction)
         }
 
@@ -173,25 +161,22 @@ extension IAPPaymentsService: SKPaymentTransactionObserver {
     // MARK: Private Helpers
 
     private func processTransaction(_ transaction: SKPaymentTransaction) {
-        guard let payload = self.paymentsCache.getCoursePayment(for: transaction) else {
-            return print("IAPPaymentsService :: payment failed missing payload data")
-        }
 
         if let wrappedTransactionState = IAPPaymentTransactionState(transactionState: transaction.transactionState) {
             self.delegate?.iapPaymentsService(
                 self,
                 didReceiveTransactionState: wrappedTransactionState,
-                forCourse: payload.courseID
+                forCourse: 1
             )
         }
 
         switch transaction.transactionState {
         case .purchased:
             guard let currentUserID = self.userAccountService.currentUser?.id,
-                  currentUserID == payload.userID else {
+                  currentUserID == 2 else {
                 self.delegate?.iapPaymentsService(
                     self,
-                    didFailPurchaseCourse: payload.courseID,
+                    didFailPurchaseCourse: 2,
                     withError: Error.paymentUserChanged
                 )
                 return print("IAPPaymentsService :: payment failed invalid user")
@@ -200,26 +185,26 @@ extension IAPPaymentsService: SKPaymentTransactionObserver {
             #if BETA_PROFILE || DEBUG
             if let createCoursePaymentDelay = self.iapSettingsStorageManager.createCoursePaymentDelay {
                 DispatchQueue.main.asyncAfter(deadline: .now() + createCoursePaymentDelay) {
-                    self.validateReceipt(transaction: transaction, payload: payload)
+                    self.validateReceipt(transaction: transaction)
                 }
             } else {
-                self.validateReceipt(transaction: transaction, payload: payload)
+                self.validateReceipt(transaction: transaction)
             }
             #else
-            self.validateReceipt(transaction: transaction, payload: payload)
+            self.validateReceipt(transaction: transaction)
             #endif
         case .failed:
             if let skError = transaction.error as? SKError {
                 if skError.code != .paymentCancelled {
                     self.delegate?.iapPaymentsService(
                         self,
-                        didFailPurchaseCourse: payload.courseID,
+                        didFailPurchaseCourse: 1,
                         withError: Error.paymentFailed(originalError: skError)
                     )
                 } else {
                     self.delegate?.iapPaymentsService(
                         self,
-                        didFailPurchaseCourse: payload.courseID,
+                        didFailPurchaseCourse: 1,
                         withError: Error.paymentCancelled(originalError: skError)
                     )
                 }
@@ -228,7 +213,7 @@ extension IAPPaymentsService: SKPaymentTransactionObserver {
                 print("IAPPaymentsService :: payment failed with unknown error")
                 self.delegate?.iapPaymentsService(
                     self,
-                    didFailPurchaseCourse: payload.courseID,
+                    didFailPurchaseCourse: 1,
                     withError: Error.paymentFailed(originalError: transaction.error)
                 )
             }
@@ -243,66 +228,9 @@ extension IAPPaymentsService: SKPaymentTransactionObserver {
 
     private func validateReceipt(
         transaction: SKPaymentTransaction,
-        payload: CoursePaymentPayload,
         forceRefreshReceipt: Bool = false
     ) {
-        let courseID = payload.courseID
-
-        self.receiptValidationService.validateCoursePayment(
-            courseID: payload.courseID,
-            price: payload.price,
-            currencyCode: payload.currencyCode,
-            promoCode: payload.promoCode,
-            forceRefreshReceipt: forceRefreshReceipt
-        ).done { _ in
-            if self.mutableState.isAutoRetryValidateReceiptOngoing(courseID: courseID) {
-                self.$mutableState.write { $0.courseIDByValidateReceiptWithRefresh[courseID] = false }
-                self.analytics.send(.courseBuyReceiptRefreshed(id: courseID, successfully: true))
-            }
-
-            self.delegate?.iapPaymentsService(self, didPurchaseCourse: payload.courseID)
-
-            self.paymentsCache.removeCoursePayment(for: transaction)
-            self.paymentQueue.finishTransaction(transaction)
-        }.catch { error in
-            print("IAPPaymentsService :: failed validate payment with error: \(error)")
-
-            if self.mutableState.isAutoRetryValidateReceiptOngoing(courseID: courseID) {
-                self.$mutableState.write { $0.courseIDByValidateReceiptWithRefresh[courseID] = false }
-                self.analytics.send(.courseBuyReceiptRefreshed(id: courseID, successfully: false))
-            }
-
-            self.$mutableState.write { $0.courseIDByValidateReceiptFailedCount[courseID, default: 0] += 1 }
-
-            if self.$mutableState.read({ $0.courseIDByValidateReceiptFailedCount[courseID] }) == 1 {
-                self.$mutableState.write { $0.courseIDByValidateReceiptWithRefresh[courseID] = true }
-
-                self.retryValidateReceipt(
-                    courseID: courseID,
-                    productIdentifier: transaction.payment.productIdentifier
-                )
-            } else {
-                self.$mutableState.write { $0.courseIDByValidateReceiptWithRefresh[courseID] = false }
-
-                let originalError: Swift.Error = {
-                    if let receiptValidationServiceError = error as? IAPReceiptValidationService.Error {
-                        switch receiptValidationServiceError {
-                        case .noAppStoreReceiptPresent, .invalidPaymentData, .invalidFinalStatus:
-                            return receiptValidationServiceError
-                        case .requestFailed(let originalError):
-                            return originalError
-                        }
-                    }
-                    return error
-                }()
-
-                self.delegate?.iapPaymentsService(
-                    self,
-                    didFailPurchaseCourse: courseID,
-                    withError: Error.paymentReceiptValidationFailed(originalError: originalError)
-                )
-            }
-        }
+       
     }
 }
 
