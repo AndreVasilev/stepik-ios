@@ -33,13 +33,18 @@ final class CourseCoverImageView: UIImageView {
 
     func loadImage(url: URL?) {
         if let url = url {
+            var options = ImageLoadingOptions(
+                transition: ImageLoadingOptions.Transition.fadeIn(
+                    duration: self.appearance.imageFadeInDuration
+                )
+            )
+            if #available(iOS 15.0, *) {
+                options.processors.append(ImageProcessingIos15())
+            }
+
             Nuke.loadImage(
                 with: url,
-                options: ImageLoadingOptions(
-                    transition: ImageLoadingOptions.Transition.fadeIn(
-                        duration: self.appearance.imageFadeInDuration
-                    )
-                ),
+                options: options,
                 into: self,
                 completion: nil
             )
@@ -53,4 +58,13 @@ extension CourseCoverImageView: ProgrammaticallyInitializableViewProtocol {
     func setupView() {
         self.image = nil
     }
+}
+
+@available(iOS 15.0, *)
+class ImageProcessingIos15: ImageProcessing {
+    func process(_ image: PlatformImage) -> PlatformImage? {
+        image.preparingForDisplay()
+    }
+
+    let identifier = "ImageProcessingIos15"
 }
