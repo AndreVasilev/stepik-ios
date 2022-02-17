@@ -77,6 +77,8 @@ final class CourseWidgetView: UIView, CourseWidgetViewProtocol {
     private var summaryLabelLeadingToSuperviewConstraint: Constraint?
     private var summaryLabelLeadingToTitleConstraint: Constraint?
 
+    private var summaryLabelText: String?
+
     var onContinueLearningButtonClick: (() -> Void)?
 
     init(
@@ -103,7 +105,19 @@ final class CourseWidgetView: UIView, CourseWidgetViewProtocol {
         self.coverView.coverImageURL = viewModel.coverImageURL
         self.coverView.shouldShowAdaptiveMark = viewModel.isAdaptive
 
-        self.summaryLabel.setTextWithHTMLString(viewModel.summary)
+        let summary = viewModel.summary
+        self.summaryLabelText = summary
+        let summaryLabelFont = self.summaryLabel.font ?? self.colorMode.courseWidgetSummaryLabelAppearance.font
+        self.summaryLabel.text = nil
+        DispatchQueue(label: "fix-hitch").async { [weak self] in
+            let converter = HTMLToAttributedStringConverter(font: summaryLabelFont)
+            let attributedString = converter.convertToAttributedString(htmlString: summary)
+            DispatchQueue.main.async {
+                if self?.summaryLabelText == summary {
+                    self?.summaryLabel.setTextWithHTMLString(attributedString)
+                }
+            }
+        }
         self.summaryLabel.isHidden = viewModel.isEnrolled
         self.separatorView.isHidden = !viewModel.isEnrolled
         self.continueLearningButton.isHidden = !viewModel.isEnrolled

@@ -13,7 +13,10 @@ extension UILabel {
     func setTextWithHTMLString(_ htmlText: String, lineSpacing: CGFloat? = nil) {
         let converter = HTMLToAttributedStringConverter(font: self.font)
         let attributedString = converter.convertToAttributedString(htmlString: htmlText)
+        self.setTextWithHTMLString(attributedString, lineSpacing: lineSpacing)
+    }
 
+    func setTextWithHTMLString(_ attributedString: NSAttributedString, lineSpacing: CGFloat? = nil) {
         if let lineSpacing = lineSpacing {
             let paragraphStyle = NSMutableParagraphStyle()
             paragraphStyle.lineSpacing = lineSpacing
