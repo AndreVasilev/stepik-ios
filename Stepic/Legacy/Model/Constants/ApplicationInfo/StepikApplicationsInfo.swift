@@ -26,13 +26,17 @@ struct StepikApplicationsInfo {
         return (clientId: id, clientSecret: secret, redirectUri: redirect, credentials: credentials)
     }
 
-    static let social: AuthInfo? = (!(Self.stepikAuthInfo?.has(path: Root.AuthType.social) ?? false)
-        ? nil
+    static let social: AuthInfo? = !(Self.stepikAuthInfo?.has(path: Root.AuthType.social) ?? false)
+        ? StepikApplicationsInfo.initAuthInfo(
+            idPath: "",
+            secretPath: "",
+            redirectPath: ""
+        )
         : StepikApplicationsInfo.initAuthInfo(
             idPath: Root.AuthType.Social.id,
             secretPath: Root.AuthType.Social.secret,
             redirectPath: Root.AuthType.Social.redirect
-        ))!
+        )
 
     static let password: AuthInfo? = !(Self.stepikAuthInfo?.has(path: Root.AuthType.password) ?? false)
         ? nil

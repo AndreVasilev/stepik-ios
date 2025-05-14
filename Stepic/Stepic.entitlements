@@ -20,7 +20,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.AlexKarpov.Stepic.WidgetContent</string>
+		<string>group.com.AlexKarpov.Stepic.Podlodka.StepicWidget</string>
 	</array>
 </dict>
 </plist>
